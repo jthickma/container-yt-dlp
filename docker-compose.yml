@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  web-downloader:
+    build: .
+    container_name: web-downloader
+    ports:
+      - "5000:5000"
+    volumes:
+      - downloader_data:/app/downloads
+    restart: unless-stopped
+
+volumes:
+  downloader_data:
