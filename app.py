@@ -34,6 +34,7 @@ def is_gallery_url(url):
         r'https?://(www\.)?pinterest\.com',
         r'https?://imgur\.com',
         r'https?://(www\.)?reddit\.com/r/',
+        r'https?://(www\.)?vsco\.co'
         # Add other gallery-dl supported sites as needed
     ]
     return any(re.match(pattern, url) for pattern in gallery_patterns)
