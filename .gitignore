@@ -1,0 +1,6 @@
+downloads
+# Ignore the downloads directory
+node_modules
+# Ignore the node_modules directory
+.github
+# Ignore the .github directory

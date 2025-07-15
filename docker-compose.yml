@@ -7,8 +7,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - downloader_data:/app/downloads
+      - ./downloads:/app/downloads
+    environment:
+      - FLASK_ENV=production
     restart: unless-stopped
-
-volumes:
-  downloader_data:

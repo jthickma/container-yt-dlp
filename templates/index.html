@@ -47,6 +47,23 @@
         button:hover {
             background-color: #0056b3;
         }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            color: #007bff;
+            margin-left: 10px;
+        }
+        .url-examples {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        .url-examples p {
+            margin: 5px 0;
+        }
         .message {
             padding: 10px;
             margin: 10px 0;
@@ -108,6 +125,8 @@
         .btn-download[disabled] {
             background-color: #aaa;
             cursor: not-allowed;
+            text-decoration: none;
+            pointer-events: none;
         }
         .btn-delete {
             background-color: #dc3545;
@@ -133,12 +152,20 @@
     <div class="container">
         <h1>Media Downloader</h1>
         
-        <form method="POST">
+        <form method="POST" id="downloadForm">
             <div class="form-group">
                 <label for="url">Enter URL:</label>
                 <input type="url" id="url" name="url" placeholder="Enter a video or gallery URL" required>
+                <div class="url-examples">
+                    <p><strong>Supported sites:</strong> YouTube, Instagram, Twitter/X, Pinterest, Reddit, Imgur, Flickr, DeviantArt, Tumblr, and many more!</p>
+                    <p><strong>Examples:</strong></p>
+                    <p>• YouTube: https://www.youtube.com/watch?v=...</p>
+                    <p>• Instagram: https://www.instagram.com/p/...</p>
+                    <p>• Twitter: https://twitter.com/user/status/...</p>
+                </div>
             </div>
-            <button type="submit">Download</button>
+            <button type="submit" id="downloadBtn">Download</button>
+            <span class="loading" id="loadingText">Downloading...</span>
         </form>
         
         {% if message %}
@@ -170,9 +197,15 @@
                             </div>
                         </div>
                         <div class="file-actions">
-                            <a href="{{ url_for('download_file', filename=file.name) }}" class="btn-download" {% if file.is_dir %}disabled{% endif %}>Download</a>
+                            <a href="{{ url_for('download_file', filename=file.name) }}" class="btn-download">
+                                {% if file.is_dir %}
+                                Download ZIP
+                                {% else %}
+                                Download
+                                {% endif %}
+                            </a>
                             <form method="POST" action="{{ url_for('delete_item', filename=file.name) }}" style="display: inline;">
-                                <button type="submit" class="btn-delete" onclick="return confirm('Are you sure you want to delete this {{ 'directory' if file.is_dir else 'file' }}?')">Delete</button>
+                                <button type="submit" class="btn-delete" onclick="return confirm('Are you sure you want to delete this {% if file.is_dir %}directory{% else %}file{% endif %}?')">Delete</button>
                             </form>
                         </div>
                     </div>
@@ -183,5 +216,22 @@
             </div>
         </div>
     </div>
+    <script>
+        document.getElementById('downloadForm').addEventListener('submit', function() {
+            const btn = document.getElementById('downloadBtn');
+            const loading = document.getElementById('loadingText');
+            
+            btn.disabled = true;
+            btn.textContent = 'Downloading...';
+            loading.style.display = 'inline';
+            
+            // Re-enable the button after 30 seconds in case of timeout
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.textContent = 'Download';
+                loading.style.display = 'none';
+            }, 30000);
+        });
+    </script>
 </body>
 </html>
