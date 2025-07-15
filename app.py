@@ -1,11 +1,13 @@
+# app.py
+
 from flask import Flask, request, render_template, redirect, url_for, send_from_directory
 import yt_dlp
-import gallery_dl
 import os
 import glob
 from datetime import datetime
 import re
 import shutil
+import subprocess
 
 app = Flask(__name__)
 DOWNLOAD_DIR = '/app/downloads'
@@ -45,7 +47,18 @@ def index():
         url = request.form['url']
         try:
             if is_gallery_url(url):
-                gallery_dl.main(['--directory', DOWNLOAD_DIR, url])
+                # Use subprocess to call gallery-dl CLI
+                result = subprocess.run(
+                    [
+                        "gallery-dl",
+                        "--directory", DOWNLOAD_DIR,
+                        url
+                    ],
+                    check=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
                 message = 'Gallery download completed!'
             else:
                 ydl_opts = {
@@ -58,6 +71,10 @@ def index():
             
             files = get_downloaded_files()
             return render_template('index.html', message=message, files=files)
+        except subprocess.CalledProcessError as e:
+            files = get_downloaded_files()
+            error_msg = f"gallery-dl error: {e.stderr.strip()}"
+            return render_template('index.html', error=error_msg, files=files)
         except Exception as e:
             files = get_downloaded_files()
             return render_template('index.html', error=f"An error occurred: {str(e)}", files=files)
