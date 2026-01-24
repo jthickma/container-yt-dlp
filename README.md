@@ -51,6 +51,13 @@ docker run -d \
 | `SECRET_KEY` | (auto-generated) | Flask secret key for sessions |
 | `DOWNLOAD_DIR` | `/app/downloads` | Directory for downloaded files |
 | `MAX_DOWNLOAD_TIMEOUT` | `300` | Download timeout in seconds |
+| `USER_AGENT` | (modern browser UA) | Custom User-Agent for yt-dlp and gallery-dl |
+| `COOKIES_PATH` | (unset) | Shared cookies file for authenticated downloads |
+| `YTDLP_COOKIES` | (unset) | Cookies file for yt-dlp (overrides `COOKIES_PATH`) |
+| `GALLERY_DL_COOKIES` | (unset) | Cookies file for gallery-dl (overrides `COOKIES_PATH`) |
+| `YTDLP_FORMAT` | `bestvideo*+bestaudio/best` | Preferred yt-dlp format selector |
+| `YTDLP_MAX_HEIGHT` | (unset) | Optional max video height for yt-dlp |
+| `GALLERY_DL_EXTRA_ARGS` | (unset) | Extra CLI args for gallery-dl |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `5000` | Server port |
 
@@ -86,6 +93,8 @@ docker compose up -d
 - Tumblr
 - VSCO
 - And [many more](https://github.com/mikf/gallery-dl/blob/master/docs/supportedsites.md)
+
+Some sites (e.g., VSCO) may require authentication. Provide a cookies file via `COOKIES_PATH`, `GALLERY_DL_COOKIES`, or `YTDLP_COOKIES` to avoid 403 errors.
 
 ## API Endpoints
 

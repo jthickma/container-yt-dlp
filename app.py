@@ -19,6 +19,7 @@ import tempfile
 import mimetypes
 import logging
 import secrets
+import shlex
 
 # Configure logging
 logging.basicConfig(
@@ -36,6 +37,16 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024  # 16KB max request size
 # Download configuration
 DOWNLOAD_DIR = os.environ.get('DOWNLOAD_DIR', '/app/downloads')
 DOWNLOAD_TIMEOUT = int(os.environ.get('MAX_DOWNLOAD_TIMEOUT', '300'))
+USER_AGENT = os.environ.get(
+    'USER_AGENT',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+)
+YTDLP_FORMAT = os.environ.get('YTDLP_FORMAT', 'bestvideo*+bestaudio/best')
+YTDLP_MAX_HEIGHT = os.environ.get('YTDLP_MAX_HEIGHT')
+YTDLP_COOKIES = os.environ.get('YTDLP_COOKIES') or os.environ.get('COOKIES_PATH')
+GALLERY_DL_COOKIES = os.environ.get('GALLERY_DL_COOKIES') or os.environ.get('COOKIES_PATH')
+GALLERY_DL_EXTRA_ARGS = os.environ.get('GALLERY_DL_EXTRA_ARGS', '')
 
 # Ensure download directory exists
 if not os.path.exists(DOWNLOAD_DIR):
@@ -63,6 +74,74 @@ def sanitize_filename(filename):
     # Remove any dangerous characters
     filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
     return filename
+
+
+def resolve_cookies_path(path):
+    """Return a cookies path if it exists, otherwise None with a warning."""
+    if not path:
+        return None
+    if os.path.exists(path):
+        return path
+    logger.warning(f"Cookies file not found at: {path}")
+    return None
+
+
+def build_gallery_dl_command(url):
+    """Build the gallery-dl command with common headers and optional cookies."""
+    gallery_dl_path = find_executable('gallery-dl')
+    cookies_path = resolve_cookies_path(GALLERY_DL_COOKIES)
+    cmd = [
+        gallery_dl_path,
+        "--directory", DOWNLOAD_DIR,
+        "--quiet",
+        "--user-agent", USER_AGENT,
+    ]
+    if cookies_path:
+        cmd.extend(["--cookies", cookies_path])
+    if GALLERY_DL_EXTRA_ARGS:
+        cmd.extend(shlex.split(GALLERY_DL_EXTRA_ARGS))
+    cmd.append(url)
+    logger.info(f"Using gallery-dl at: {gallery_dl_path}")
+    return cmd
+
+
+def build_yt_dlp_opts(use_fallback_format=False):
+    """Build yt-dlp options with resilient defaults and optional cookies."""
+    cookies_path = resolve_cookies_path(YTDLP_COOKIES)
+    if use_fallback_format:
+        chosen_format = 'best'
+    elif YTDLP_MAX_HEIGHT:
+        try:
+            max_height = int(YTDLP_MAX_HEIGHT)
+            chosen_format = (
+                f"bestvideo[height<={max_height}]+bestaudio/"
+                f"best[height<={max_height}]/best"
+            )
+        except ValueError:
+            logger.warning("Invalid YTDLP_MAX_HEIGHT; falling back to default format")
+            chosen_format = YTDLP_FORMAT
+    else:
+        chosen_format = YTDLP_FORMAT
+
+    ydl_opts = {
+        'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s-%(id)s.%(ext)s'),
+        'noplaylist': True,
+        'format': chosen_format,
+        'format_sort': ['res:720', 'ext:mp4:m4a'],
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'no_warnings': True,
+        'retries': 3,
+        'fragment_retries': 3,
+        'socket_timeout': 30,
+        'concurrent_fragment_downloads': 3,
+        'http_headers': {
+            'User-Agent': USER_AGENT,
+        },
+    }
+    if cookies_path:
+        ydl_opts['cookiefile'] = cookies_path
+    return ydl_opts
 
 def get_downloaded_files():
     """
@@ -128,15 +207,9 @@ def index():
         try:
             if is_gallery_url(url):
                 # Use subprocess to call gallery-dl CLI
-                gallery_dl_path = find_executable('gallery-dl')
-                logger.info(f"Using gallery-dl at: {gallery_dl_path}")
-                result = subprocess.run(
-                    [
-                        gallery_dl_path,
-                        "--directory", DOWNLOAD_DIR,
-                        "--quiet",
-                        url
-                    ],
+                cmd = build_gallery_dl_command(url)
+                subprocess.run(
+                    cmd,
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -146,15 +219,18 @@ def index():
                 message = 'Gallery download completed!'
                 logger.info(f"Gallery download completed for URL: {url[:50]}...")
             else:
-                ydl_opts = {
-                    'outtmpl': os.path.join(DOWNLOAD_DIR, '%(title)s-%(id)s.%(ext)s'),
-                    'noplaylist': True,
-                    'format': 'best[height<=720]',  # Limit quality to reduce size
-                    'quiet': True,
-                    'no_warnings': True,
-                }
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
+                ydl_opts = build_yt_dlp_opts()
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                except yt_dlp.utils.DownloadError as e:
+                    if "Requested format is not available" in str(e):
+                        logger.warning("Requested format not available; retrying with fallback format")
+                        fallback_opts = build_yt_dlp_opts(use_fallback_format=True)
+                        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                            ydl.download([url])
+                    else:
+                        raise
                 message = 'Video download completed!'
                 logger.info(f"Video download completed for URL: {url[:50]}...")
             
@@ -165,7 +241,14 @@ def index():
             files = get_downloaded_files()
             return render_template('index.html', error="Download timed out. Please try again.", files=files)
         except subprocess.CalledProcessError as e:
-            error_msg = f"gallery-dl error: {e.stderr.strip() if e.stderr else 'Unknown error'}"
+            stderr = e.stderr.strip() if e.stderr else ''
+            if '403' in stderr and not resolve_cookies_path(GALLERY_DL_COOKIES):
+                error_msg = (
+                    "gallery-dl error: Access denied (403). This site may require "
+                    "cookies. Configure GALLERY_DL_COOKIES or COOKIES_PATH."
+                )
+            else:
+                error_msg = f"gallery-dl error: {stderr or 'Unknown error'}"
             logger.error(f"Gallery-dl error: {error_msg}")
             files = get_downloaded_files()
             return render_template('index.html', error=error_msg, files=files)
