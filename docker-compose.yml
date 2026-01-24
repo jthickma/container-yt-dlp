@@ -1,13 +1,60 @@
-version: '3.8'
+# ============================================
+# Media Downloader - Docker Compose Configuration
+# ============================================
+# Production-ready configuration with best practices
 
 services:
-  web-downloader:
-    build: .
-    container_name: web-downloader
+  media-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: media-downloader:latest
+    container_name: media-downloader
+    
+    # Port mapping
     ports:
       - "5000:5000"
+    
+    # Persistent storage for downloads
     volumes:
-      - ./downloads:/app/downloads
+      - downloads:/app/downloads
+    
+    # Environment configuration
     environment:
       - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+    
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Restart policy
     restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem (downloads volume is writable)
+    read_only: true
+    tmpfs:
+      - /tmp
+
+# Named volumes for data persistence
+volumes:
+  downloads:
+    driver: local
