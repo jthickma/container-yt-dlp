@@ -82,6 +82,46 @@
         .files-section {
             margin-top: 30px;
         }
+        .cookies-section {
+            margin-top: 30px;
+        }
+        .cookies-list {
+            margin-top: 15px;
+        }
+        .cookie-item {
+            background-color: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cookie-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        .cookie-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .input-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .input-row input[type="text"],
+        .input-row input[type="url"] {
+            flex: 1 1 260px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .input-row input[type="file"] {
+            flex: 1 1 260px;
+        }
         .file-list {
             margin-top: 20px;
         }
@@ -175,6 +215,43 @@
         {% if error %}
         <div class="message error">{{ error }}</div>
         {% endif %}
+
+        <div class="cookies-section">
+            <h2>Site Cookies (Netscape Format)</h2>
+            <form method="POST" action="{{ url_for('upload_cookies') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="site">Site URL or Hostname:</label>
+                    <div class="input-row">
+                        <input type="text" id="site" name="site" placeholder="e.g. https://vsco.co or vsco.co" required>
+                        <input type="file" id="cookies_file" name="cookies_file" accept=".txt" required>
+                        <button type="submit">Upload Cookies</button>
+                    </div>
+                    <div class="url-examples">
+                        <p>Upload a Netscape-format cookies file for a specific site.</p>
+                    </div>
+                </div>
+            </form>
+
+            <div class="cookies-list">
+                {% if cookie_files %}
+                    {% for cookie in cookie_files %}
+                    <div class="cookie-item">
+                        <div>
+                            <div class="file-name">{{ cookie.host }}</div>
+                            <div class="cookie-meta">Size: {{ cookie.size }} KB | Uploaded: {{ cookie.modified }}</div>
+                        </div>
+                        <div class="cookie-actions">
+                            <form method="POST" action="{{ url_for('delete_cookies', host=cookie.host) }}" style="display: inline;">
+                                <button type="submit" class="btn-delete" onclick="return confirm('Delete cookies for {{ cookie.host }}?')">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-files">No site cookies uploaded yet.</div>
+                {% endif %}
+            </div>
+        </div>
         
         <div class="files-section">
             <h2>Downloaded Media</h2>

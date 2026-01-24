@@ -20,6 +20,7 @@ import mimetypes
 import logging
 import secrets
 import shlex
+from urllib.parse import urlparse
 
 # Configure logging
 logging.basicConfig(
@@ -32,11 +33,12 @@ app = Flask(__name__)
 
 # Security configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024  # 16KB max request size
+app.config['MAX_CONTENT_LENGTH'] = 512 * 1024  # 512KB max request size
 
 # Download configuration
 DOWNLOAD_DIR = os.environ.get('DOWNLOAD_DIR', '/app/downloads')
 DOWNLOAD_TIMEOUT = int(os.environ.get('MAX_DOWNLOAD_TIMEOUT', '300'))
+COOKIES_DIR = os.environ.get('COOKIES_DIR', '/app/cookies')
 USER_AGENT = os.environ.get(
     'USER_AGENT',
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
@@ -44,14 +46,20 @@ USER_AGENT = os.environ.get(
 )
 YTDLP_FORMAT = os.environ.get('YTDLP_FORMAT', 'bestvideo*+bestaudio/best')
 YTDLP_MAX_HEIGHT = os.environ.get('YTDLP_MAX_HEIGHT')
-YTDLP_COOKIES = os.environ.get('YTDLP_COOKIES') or os.environ.get('COOKIES_PATH')
-GALLERY_DL_COOKIES = os.environ.get('GALLERY_DL_COOKIES') or os.environ.get('COOKIES_PATH')
+COOKIES_PATH = os.environ.get('COOKIES_PATH')
+YTDLP_COOKIES = os.environ.get('YTDLP_COOKIES')
+GALLERY_DL_COOKIES = os.environ.get('GALLERY_DL_COOKIES')
 GALLERY_DL_EXTRA_ARGS = os.environ.get('GALLERY_DL_EXTRA_ARGS', '')
 
 # Ensure download directory exists
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     logger.info(f"Created download directory: {DOWNLOAD_DIR}")
+
+# Ensure cookies directory exists
+if not os.path.exists(COOKIES_DIR):
+    os.makedirs(COOKIES_DIR, exist_ok=True)
+    logger.info(f"Created cookies directory: {COOKIES_DIR}")
 
 
 def find_executable(name):
@@ -76,6 +84,38 @@ def sanitize_filename(filename):
     return filename
 
 
+def normalize_host(value):
+    """Normalize a hostname or URL into a safe hostname string."""
+    if not value:
+        return None
+    if re.match(r'^https?://', value):
+        parsed = urlparse(value)
+        host = parsed.netloc
+    else:
+        host = value
+    if ':' in host:
+        host = host.split(':', 1)[0]
+    host = host.strip().lower()
+    host = re.sub(r'[^a-z0-9.-]', '', host)
+    return host or None
+
+
+def cookies_path_for_host(host):
+    """Return the cookies file path for a specific host if it exists."""
+    if not host:
+        return None
+    candidate = os.path.join(COOKIES_DIR, f"{host}.txt")
+    if os.path.exists(candidate):
+        return candidate
+    return None
+
+
+def cookies_path_for_url(url):
+    """Return the cookies file path for a URL's host if it exists."""
+    host = normalize_host(url)
+    return cookies_path_for_host(host)
+
+
 def resolve_cookies_path(path):
     """Return a cookies path if it exists, otherwise None with a warning."""
     if not path:
@@ -89,7 +129,11 @@ def resolve_cookies_path(path):
 def build_gallery_dl_command(url):
     """Build the gallery-dl command with common headers and optional cookies."""
     gallery_dl_path = find_executable('gallery-dl')
-    cookies_path = resolve_cookies_path(GALLERY_DL_COOKIES)
+    cookies_path = (
+        cookies_path_for_url(url)
+        or resolve_cookies_path(GALLERY_DL_COOKIES)
+        or resolve_cookies_path(COOKIES_PATH)
+    )
     cmd = [
         gallery_dl_path,
         "--directory", DOWNLOAD_DIR,
@@ -105,9 +149,13 @@ def build_gallery_dl_command(url):
     return cmd
 
 
-def build_yt_dlp_opts(use_fallback_format=False):
+def build_yt_dlp_opts(url, use_fallback_format=False):
     """Build yt-dlp options with resilient defaults and optional cookies."""
-    cookies_path = resolve_cookies_path(YTDLP_COOKIES)
+    cookies_path = (
+        cookies_path_for_url(url)
+        or resolve_cookies_path(YTDLP_COOKIES)
+        or resolve_cookies_path(COOKIES_PATH)
+    )
     if use_fallback_format:
         chosen_format = 'best'
     elif YTDLP_MAX_HEIGHT:
@@ -142,6 +190,23 @@ def build_yt_dlp_opts(use_fallback_format=False):
     if cookies_path:
         ydl_opts['cookiefile'] = cookies_path
     return ydl_opts
+
+
+def get_cookie_files():
+    """Return list of stored cookie files for display."""
+    items = []
+    try:
+        for item_path in glob.glob(os.path.join(COOKIES_DIR, "*.txt")):
+            stat = os.stat(item_path)
+            items.append({
+                'name': os.path.basename(item_path),
+                'host': os.path.splitext(os.path.basename(item_path))[0],
+                'size': round(stat.st_size / 1024, 2),
+                'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            })
+    except OSError as e:
+        logger.error(f"Error reading cookies directory: {e}")
+    return sorted(items, key=lambda x: x['modified'], reverse=True)
 
 def get_downloaded_files():
     """
@@ -200,7 +265,8 @@ def index():
         url = request.form.get('url', '').strip()
         if not url:
             files = get_downloaded_files()
-            return render_template('index.html', error="Please provide a valid URL", files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error="Please provide a valid URL", files=files, cookie_files=cookie_files)
         
         logger.info(f"Download request received for URL: {url[:50]}...")
         
@@ -219,14 +285,14 @@ def index():
                 message = 'Gallery download completed!'
                 logger.info(f"Gallery download completed for URL: {url[:50]}...")
             else:
-                ydl_opts = build_yt_dlp_opts()
+                ydl_opts = build_yt_dlp_opts(url)
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([url])
                 except yt_dlp.utils.DownloadError as e:
                     if "Requested format is not available" in str(e):
                         logger.warning("Requested format not available; retrying with fallback format")
-                        fallback_opts = build_yt_dlp_opts(use_fallback_format=True)
+                        fallback_opts = build_yt_dlp_opts(url, use_fallback_format=True)
                         with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                             ydl.download([url])
                     else:
@@ -235,11 +301,13 @@ def index():
                 logger.info(f"Video download completed for URL: {url[:50]}...")
             
             files = get_downloaded_files()
-            return render_template('index.html', message=message, files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', message=message, files=files, cookie_files=cookie_files)
         except subprocess.TimeoutExpired:
             logger.warning(f"Download timed out for URL: {url[:50]}...")
             files = get_downloaded_files()
-            return render_template('index.html', error="Download timed out. Please try again.", files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error="Download timed out. Please try again.", files=files, cookie_files=cookie_files)
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.strip() if e.stderr else ''
             if '403' in stderr and not resolve_cookies_path(GALLERY_DL_COOKIES):
@@ -251,18 +319,22 @@ def index():
                 error_msg = f"gallery-dl error: {stderr or 'Unknown error'}"
             logger.error(f"Gallery-dl error: {error_msg}")
             files = get_downloaded_files()
-            return render_template('index.html', error=error_msg, files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error=error_msg, files=files, cookie_files=cookie_files)
         except yt_dlp.utils.DownloadError as e:
             logger.error(f"yt-dlp download error: {str(e)}")
             files = get_downloaded_files()
-            return render_template('index.html', error=f"Download error: {str(e)}", files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error=f"Download error: {str(e)}", files=files, cookie_files=cookie_files)
         except Exception as e:
             logger.exception(f"Unexpected error during download: {str(e)}")
             files = get_downloaded_files()
-            return render_template('index.html', error=f"An error occurred: {str(e)}", files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error=f"An error occurred: {str(e)}", files=files, cookie_files=cookie_files)
     
     files = get_downloaded_files()
-    return render_template('index.html', error=None, message=None, files=files)
+    cookie_files = get_cookie_files()
+    return render_template('index.html', error=None, message=None, files=files, cookie_files=cookie_files)
 
 @app.route('/download/<path:filename>')
 def download_file(filename):
@@ -333,11 +405,80 @@ def delete_item(filename):
         else:
             logger.warning(f"File or directory not found for deletion: {filename}")
             files = get_downloaded_files()
-            return render_template('index.html', error="File or directory not found", files=files)
+            cookie_files = get_cookie_files()
+            return render_template('index.html', error="File or directory not found", files=files, cookie_files=cookie_files)
     except Exception as e:
         logger.error(f"Error deleting item: {str(e)}")
         files = get_downloaded_files()
-        return render_template('index.html', error=f"Error deleting item: {str(e)}", files=files)
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error=f"Error deleting item: {str(e)}", files=files, cookie_files=cookie_files)
+
+
+@app.route('/cookies/upload', methods=['POST'])
+def upload_cookies():
+    """Upload a Netscape-format cookies file for a specific site."""
+    site_value = request.form.get('site', '').strip()
+    host = normalize_host(site_value)
+    if not host:
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Please provide a valid site URL or hostname.", files=files, cookie_files=cookie_files)
+
+    if 'cookies_file' not in request.files:
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Please choose a cookies file to upload.", files=files, cookie_files=cookie_files)
+
+    upload = request.files['cookies_file']
+    if not upload or upload.filename == '':
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Please choose a cookies file to upload.", files=files, cookie_files=cookie_files)
+
+    content = upload.read()
+    if b'Netscape' not in content[:200]:
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Cookies file must be in Netscape format.", files=files, cookie_files=cookie_files)
+
+    dest_path = os.path.join(COOKIES_DIR, f"{host}.txt")
+    try:
+        with open(dest_path, 'wb') as f:
+            f.write(content)
+        logger.info(f"Uploaded cookies for host: {host}")
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', message=f"Cookies uploaded for {host}.", files=files, cookie_files=cookie_files)
+    except Exception as e:
+        logger.error(f"Error saving cookies: {str(e)}")
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error=f"Error saving cookies: {str(e)}", files=files, cookie_files=cookie_files)
+
+
+@app.route('/cookies/delete/<path:host>', methods=['POST'])
+def delete_cookies(host):
+    """Delete a stored cookies file by host."""
+    safe_host = normalize_host(host)
+    if not safe_host:
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Invalid cookies entry.", files=files, cookie_files=cookie_files)
+
+    path = os.path.join(COOKIES_DIR, f"{safe_host}.txt")
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info(f"Deleted cookies for host: {safe_host}")
+            return redirect(url_for('index'))
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error="Cookies file not found.", files=files, cookie_files=cookie_files)
+    except Exception as e:
+        logger.error(f"Error deleting cookies: {str(e)}")
+        files = get_downloaded_files()
+        cookie_files = get_cookie_files()
+        return render_template('index.html', error=f"Error deleting cookies: {str(e)}", files=files, cookie_files=cookie_files)
 
 
 @app.route('/health')

@@ -58,6 +58,7 @@ docker run -d \
 | `YTDLP_FORMAT` | `bestvideo*+bestaudio/best` | Preferred yt-dlp format selector |
 | `YTDLP_MAX_HEIGHT` | (unset) | Optional max video height for yt-dlp |
 | `GALLERY_DL_EXTRA_ARGS` | (unset) | Extra CLI args for gallery-dl |
+| `COOKIES_DIR` | `/app/cookies` | Storage for uploaded per-site cookies |
 | `HOST` | `0.0.0.0` | Server bind address |
 | `PORT` | `5000` | Server port |
 
@@ -95,6 +96,7 @@ docker compose up -d
 - And [many more](https://github.com/mikf/gallery-dl/blob/master/docs/supportedsites.md)
 
 Some sites (e.g., VSCO) may require authentication. Provide a cookies file via `COOKIES_PATH`, `GALLERY_DL_COOKIES`, or `YTDLP_COOKIES` to avoid 403 errors.
+You can also upload per-site cookies (Netscape format) directly in the web UI; the app stores them in `COOKIES_DIR` and uses them automatically for matching hosts.
 
 ## API Endpoints
 
