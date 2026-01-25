@@ -228,7 +228,7 @@
 
         <div class="cookies-section">
             <h2>Site Cookies (Netscape Format)</h2>
-            <form method="POST" action="{{ url_for('upload_cookies') }}" enctype="multipart/form-data">
+            <form method="POST" action="{{ url_for('main.upload_cookies') }}" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="site">Site URL or Hostname:</label>
                     <div class="input-row">
@@ -251,7 +251,7 @@
                             <div class="cookie-meta">Size: {{ cookie.size }} KB | Uploaded: {{ cookie.modified }}</div>
                         </div>
                         <div class="cookie-actions">
-                            <form method="POST" action="{{ url_for('delete_cookies', host=cookie.host) }}" style="display: inline;">
+                            <form method="POST" action="{{ url_for('main.delete_cookies', host=cookie.host) }}" style="display: inline;">
                                 <button type="submit" class="btn-delete" onclick="return confirm('Delete cookies for {{ cookie.host }}?')">Delete</button>
                             </form>
                         </div>
@@ -284,14 +284,14 @@
                             </div>
                         </div>
                         <div class="file-actions">
-                            <a href="{{ url_for('download_file', filename=file.name) }}" class="btn-download">
+                            <a href="{{ url_for('main.download_file', filename=file.name) }}" class="btn-download">
                                 {% if file.is_dir %}
                                 Download ZIP
                                 {% else %}
                                 Download
                                 {% endif %}
                             </a>
-                            <form method="POST" action="{{ url_for('delete_item', filename=file.name) }}" style="display: inline;">
+                            <form method="POST" action="{{ url_for('main.delete_item', filename=file.name) }}" style="display: inline;">
                                 <button type="submit" class="btn-delete" onclick="return confirm('Are you sure you want to delete this {% if file.is_dir %}directory{% else %}file{% endif %}?')">Delete</button>
                             </form>
                         </div>
