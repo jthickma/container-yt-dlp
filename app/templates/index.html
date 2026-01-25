@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Media Downloader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="url"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            color: #007bff;
+            margin-left: 10px;
+        }
+        .url-examples {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        .url-examples p {
+            margin: 5px 0;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .files-section {
+            margin-top: 30px;
+        }
+        .cookies-section {
+            margin-top: 30px;
+        }
+        .cookies-list {
+            margin-top: 15px;
+        }
+        .cookie-item {
+            background-color: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cookie-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        .cookie-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .input-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .input-row input[type="text"],
+        .input-row input[type="url"] {
+            flex: 1 1 260px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .input-row input[type="file"] {
+            flex: 1 1 260px;
+        }
+        .file-list {
+            margin-top: 20px;
+        }
+        .file-item {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-info {
+            flex-grow: 1;
+        }
+        .file-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .file-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        .file-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-download {
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-download:hover {
+            background-color: #218838;
+        }
+        .btn-download[disabled] {
+            background-color: #aaa;
+            cursor: not-allowed;
+            text-decoration: none;
+            pointer-events: none;
+        }
+        .btn-delete {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-delete:hover {
+            background-color: #c82333;
+        }
+        .no-files {
+            text-align: center;
+            color: #666;
+            padding: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Media Downloader</h1>
+        
+        <form method="POST" id="downloadForm">
+            <div class="form-group">
+                <label for="url">Enter URL:</label>
+                <input type="url" id="url" name="url" placeholder="Enter a video or gallery URL" required>
+                <div class="url-examples">
+                    <p><strong>Supported sites:</strong> YouTube, Instagram, Twitter/X, Pinterest, Reddit, Imgur, Flickr, DeviantArt, Tumblr, and many more!</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="cookie_file">Optional: Select Cookie File</label>
+                <select id="cookie_file" name="cookie_file" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd; font-size: 16px;">
+                    <option value="">Auto-detect (Default)</option>
+                    {% for cookie in cookie_files %}
+                    <option value="{{ cookie.host }}">{{ cookie.name }}</option>
+                    {% endfor %}
+                </select>
+                <div class="url-examples">
+                    <p>Select a specific cookie file if auto-detection fails (e.g. for sites with strict auth)</p>
+                </div>
+            </div>
+
+            <button type="submit" id="downloadBtn">Download</button>
+            <span class="loading" id="loadingText">Downloading...</span>
+        </form>
+        
+        {% if message %}
+        <div class="message success">{{ message }}</div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="message error">{{ error }}</div>
+        {% endif %}
+
+        <div class="cookies-section">
+            <h2>Site Cookies (Netscape Format)</h2>
+            <form method="POST" action="{{ url_for('upload_cookies') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="site">Site URL or Hostname:</label>
+                    <div class="input-row">
+                        <input type="text" id="site" name="site" placeholder="e.g. https://vsco.co or vsco.co" required>
+                        <input type="file" id="cookies_file" name="cookies_file" accept=".txt" required>
+                        <button type="submit">Upload Cookies</button>
+                    </div>
+                    <div class="url-examples">
+                        <p>Upload a Netscape-format cookies file for a specific site.</p>
+                    </div>
+                </div>
+            </form>
+
+            <div class="cookies-list">
+                {% if cookie_files %}
+                    {% for cookie in cookie_files %}
+                    <div class="cookie-item">
+                        <div>
+                            <div class="file-name">{{ cookie.host }}</div>
+                            <div class="cookie-meta">Size: {{ cookie.size }} KB | Uploaded: {{ cookie.modified }}</div>
+                        </div>
+                        <div class="cookie-actions">
+                            <form method="POST" action="{{ url_for('delete_cookies', host=cookie.host) }}" style="display: inline;">
+                                <button type="submit" class="btn-delete" onclick="return confirm('Delete cookies for {{ cookie.host }}?')">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-files">No site cookies uploaded yet.</div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="files-section">
+            <h2>Downloaded Media</h2>
+            <div class="file-list">
+                {% if files %}
+                    {% for file in files %}
+                    <div class="file-item">
+                        <div class="file-info">
+                            <div class="file-name">
+                                {{ file.name }}
+                                {% if file.is_dir %}
+                                <span>(directory)</span>
+                                {% endif %}
+                            </div>
+                            <div class="file-meta">
+                                {% if not file.is_dir %}
+                                Size: {{ file.size }} MB | 
+                                {% endif %}
+                                Downloaded: {{ file.modified }}
+                            </div>
+                        </div>
+                        <div class="file-actions">
+                            <a href="{{ url_for('download_file', filename=file.name) }}" class="btn-download">
+                                {% if file.is_dir %}
+                                Download ZIP
+                                {% else %}
+                                Download
+                                {% endif %}
+                            </a>
+                            <form method="POST" action="{{ url_for('delete_item', filename=file.name) }}" style="display: inline;">
+                                <button type="submit" class="btn-delete" onclick="return confirm('Are you sure you want to delete this {% if file.is_dir %}directory{% else %}file{% endif %}?')">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="no-files">No media downloaded yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('downloadForm').addEventListener('submit', function() {
+            const btn = document.getElementById('downloadBtn');
+            const loading = document.getElementById('loadingText');
+            
+            btn.disabled = true;
+            btn.textContent = 'Downloading...';
+            loading.style.display = 'inline';
+            
+            // Re-enable the button after 30 seconds in case of timeout
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.textContent = 'Download';
+                loading.style.display = 'none';
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

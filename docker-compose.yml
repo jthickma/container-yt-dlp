@@ -16,13 +16,17 @@ services:
       - "5000:5000"
     
     # Persistent storage for downloads
+    # Persistent storage for downloads and cookies
     volumes:
-      - downloads:/app/downloads
+      - ./downloads:/app/downloads
+      - ./cookies:/app/cookies
     
     # Environment configuration
     environment:
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      - PUID=1000  # User ID
+      - PGID=1000  # Group ID
     
     # Resource limits (adjust based on your system)
     deploy:
@@ -49,12 +53,12 @@ services:
     security_opt:
       - no-new-privileges:true
     
-    # Read-only root filesystem (downloads volume is writable)
+    # Read-only root filesystem (downloads and cookies are writable)
     read_only: true
     tmpfs:
       - /tmp
 
-# Named volumes for data persistence
-volumes:
-  downloads:
-    driver: local
+# Local bind mount example (commented out by default)
+# volumes:
+#   downloads:
+#     driver: local
